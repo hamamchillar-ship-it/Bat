@@ -4,6 +4,7 @@ import nodriver as uc
 import google.generativeai as genai
 import json
 import time
+import glob
 from typing import Optional, Dict, Any
 import os
 
@@ -19,11 +20,35 @@ class GeminiEnhancedScraper:
     async def start_browser(self):
         """Start the undetected browser"""
         print("Starting undetected browser...")
-        self.browser = await uc.start(
-            headless=False,  # Set to True for headless mode
-            user_data_dir=None,  # Use temporary profile
+        
+        # Try to find Chrome binary in common locations
+        chrome_paths = [
+            '/nix/store/*/bin/google-chrome-stable',
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser'
+        ]
+        
+        chrome_binary = None
+        for path in chrome_paths:
+            if '*' in path:
+                # Handle Nix store paths with wildcards
+                import glob
+                matches = glob.glob(path)
+                if matches:
+                    chrome_binary = matches[0]
+                    break
+            else:
+                if os.path.exists(path):
+                    chrome_binary = path
+                    break
+        
+        browser_args = {
+            'headless': True,  # Use headless for Replit
+            'user_data_dir': None,  # Use temporary profile
             # Additional options to avoid detection
-            args=[
+            'args': [
                 '--no-first-run',
                 '--no-default-browser-check',
                 '--disable-blink-features=AutomationControlled',
@@ -31,9 +56,17 @@ class GeminiEnhancedScraper:
                 '--disable-features=VizDisplayCompositor',
                 '--disable-extensions',
                 '--no-sandbox',
-                '--disable-dev-shm-usage'
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-software-rasterizer'
             ]
-        )
+        }
+        
+        if chrome_binary:
+            print(f"Using Chrome binary: {chrome_binary}")
+            browser_args['browser_executable_path'] = chrome_binary
+        
+        self.browser = await uc.start(**browser_args)
         self.page = await self.browser.get('about:blank')
         
         # Execute stealth scripts to avoid detection
