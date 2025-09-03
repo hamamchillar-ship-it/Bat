@@ -7,6 +7,111 @@ import glob
 from typing import Optional, Dict, Any
 import os
 
+class TestScraper:
+    """Test scraper without Gemini AI for basic browser testing"""
+    def __init__(self):
+        self.browser = None
+        self.page = None
+
+    async def start_browser(self):
+        """Start the undetected browser (same as GeminiEnhancedScraper)"""
+        print("Starting undetected browser...")
+        # Try to find Chrome binary in common locations
+        chrome_paths = [
+            '/nix/store/*/bin/google-chrome-stable',
+            '/nix/store/*/bin/google-chrome',
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser'
+        ]
+
+        chrome_binary = None
+        print("Searching for Chrome binary...")
+        for path in chrome_paths:
+            if '*' in path:
+                matches = glob.glob(path)
+                print(f"Checking glob pattern {path}: {matches}")
+                if matches:
+                    chrome_binary = matches[0]
+                    print(f"Found Chrome at: {chrome_binary}")
+                    break
+            else:
+                print(f"Checking path: {path}")
+                if os.path.exists(path):
+                    chrome_binary = path
+                    print(f"Found Chrome at: {chrome_binary}")
+                    break
+
+        if not chrome_binary:
+            print("Chrome not found in expected locations. Attempting to use system PATH...")
+            import shutil
+            chrome_binary = shutil.which('google-chrome') or shutil.which('google-chrome-stable') or shutil.which('chromium')
+            if chrome_binary:
+                print(f"Found Chrome in PATH: {chrome_binary}")
+            else:
+                print("Warning: Chrome binary not found. Browser may fail to start.")
+
+        browser_args = {
+            'headless': True,
+            'user_data_dir': None,
+            'args': [
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-extensions',
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--single-process',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--virtual-time-budget=5000'
+            ]
+        }
+
+        if chrome_binary:
+            print(f"Using Chrome binary: {chrome_binary}")
+            browser_args['browser_executable_path'] = chrome_binary
+
+        try:
+            print("Starting browser with nodriver...")
+            self.browser = await asyncio.wait_for(uc.start(**browser_args), timeout=30)
+            print("Browser started, getting initial page...")
+            self.page = await asyncio.wait_for(self.browser.get('about:blank'), timeout=15)
+            print("Initial page loaded successfully!")
+        except asyncio.TimeoutError:
+            print("❌ Browser startup timed out. This might be due to Replit environment limitations.")
+            print("💡 Try running again or check if Chrome is properly installed.")
+            raise Exception("Browser startup timeout")
+        except Exception as e:
+            print(f"❌ Failed to start browser: {e}")
+            raise
+
+    async def simple_test(self, url: str = "https://httpbin.org/html"):
+        """Simple test without AI analysis"""
+        print(f"🧪 Testing browser with URL: {url}")
+        try:
+            await self.page.get(url, timeout=15000)
+            await asyncio.sleep(2)
+            title = await self.page.evaluate('document.title')
+            print(f"✅ Successfully loaded page! Title: {title}")
+            content = await self.page.get_content()
+            print(f"📄 Page content length: {len(content)} characters")
+            return True
+        except Exception as e:
+            print(f"❌ Test failed: {e}")
+            return False
+
+    async def close(self):
+        if self.browser:
+            await self.browser.stop()
+            print("Browser closed successfully!")
+
 class GeminiEnhancedScraper:
     def __init__(self, gemini_api_key: str):
         """Initialize the scraper with Gemini AI integration"""
@@ -61,7 +166,7 @@ class GeminiEnhancedScraper:
         browser_args = {
             'headless': True,  # Use headless for Replit
             'user_data_dir': None,  # Use temporary profile
-            # Additional options to avoid detection
+            # Additional options to avoid detection and work in Replit
             'args': [
                 '--no-first-run',
                 '--no-default-browser-check',
@@ -72,7 +177,12 @@ class GeminiEnhancedScraper:
                 '--no-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--disable-software-rasterizer'
+                '--disable-software-rasterizer',
+                '--single-process',  # Important for Replit
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--virtual-time-budget=5000'
             ]
         }
 
@@ -80,8 +190,19 @@ class GeminiEnhancedScraper:
             print(f"Using Chrome binary: {chrome_binary}")
             browser_args['browser_executable_path'] = chrome_binary
 
-        self.browser = await uc.start(**browser_args)
-        self.page = await self.browser.get('about:blank')
+        try:
+            print("Starting browser with nodriver...")
+            self.browser = await asyncio.wait_for(uc.start(**browser_args), timeout=30)
+            print("Browser started, getting initial page...")
+            self.page = await asyncio.wait_for(self.browser.get('about:blank'), timeout=15)
+            print("Initial page loaded successfully!")
+        except asyncio.TimeoutError:
+            print("❌ Browser startup timed out. This might be due to Replit environment limitations.")
+            print("💡 Try running again or check if Chrome is properly installed.")
+            raise Exception("Browser startup timeout")
+        except Exception as e:
+            print(f"❌ Failed to start browser: {e}")
+            raise
 
         # Execute stealth scripts to avoid detection
         await self.page.evaluate("""
@@ -251,65 +372,76 @@ async def main():
         print("   2. Add a new secret with key: GEMINI_API_KEY")
         print("   3. Add your Gemini API key as the value")
         print("   4. Get your API key from: https://makersuite.google.com/app/apikey")
-        return
-
-    scraper = GeminiEnhancedScraper(GEMINI_API_KEY)
+        print("\n🧪 Running in TEST MODE (browser only, no AI analysis)...")
+        scraper = TestScraper()  # Use test mode without Gemini
+    else:
+        scraper = GeminiEnhancedScraper(GEMINI_API_KEY)
 
     try:
         # Start the browser
         await scraper.start_browser()
 
-        # Test with a simple website first
-        url = "https://httpbin.org/html"  # Simple test page
-
-        # Custom selectors for specific data extraction
-        custom_selectors = {
-            'title': 'title',
-            'main_content': 'main, article, .content',
-            'navigation': 'nav a',
-            'metadata': 'meta[name="description"]'
-        }
-
-        # Custom analysis prompt
-        analysis_prompt = """
-        Please analyze this webpage and:
-        1. Identify the main topic and purpose
-        2. Extract any contact information, prices, or important data
-        3. Suggest what other pages might be worth scraping
-        4. Identify any potential data patterns or structures
-        """
-
-        # Perform the scrape
-        result = await scraper.smart_scrape(url, custom_selectors, analysis_prompt)
-
-        # Display results
-        print("\n" + "="*50)
-        print("SCRAPING RESULTS")
-        print("="*50)
-        print(f"URL: {result.get('url', 'N/A')}")
-        print(f"Timestamp: {result.get('timestamp', 'N/A')}")
-
-        print("\nEXTRACTED DATA:")
-        print("-" * 30)
-        for key, value in result.get('extracted_data', {}).items():
-            print(f"{key.upper()}:")
-            if isinstance(value, list):
-                for i, item in enumerate(value[:3]):  # Show first 3 items
-                    print(f"  {i+1}. {item}")
-                if len(value) > 3:
-                    print(f"  ... and {len(value) - 3} more")
+        # Check if we're in test mode
+        if isinstance(scraper, TestScraper):
+            # Just do a simple browser test
+            success = await scraper.simple_test()
+            if success:
+                print("\n✅ Browser test completed successfully!")
+                print("🔑 To enable AI analysis, set up your GEMINI_API_KEY in Secrets")
             else:
-                print(f"  {value}")
-            print()
+                print("\n❌ Browser test failed")
+        else:
+            # Full scraping with AI analysis
+            url = "https://httpbin.org/html"  # Simple test page
 
-        print("\nAI ANALYSIS:")
-        print("-" * 30)
-        print(result.get('ai_analysis', 'No analysis available'))
+            # Custom selectors for specific data extraction
+            custom_selectors = {
+                'title': 'title',
+                'main_content': 'main, article, .content',
+                'navigation': 'nav a',
+                'metadata': 'meta[name="description"]'
+            }
 
-        # Save results to file
-        with open('scraping_results.json', 'w', encoding='utf-8') as f:
-            json.dump(result, f, indent=2, ensure_ascii=False)
-        print(f"\nResults saved to scraping_results.json")
+            # Custom analysis prompt
+            analysis_prompt = """
+            Please analyze this webpage and:
+            1. Identify the main topic and purpose
+            2. Extract any contact information, prices, or important data
+            3. Suggest what other pages might be worth scraping
+            4. Identify any potential data patterns or structures
+            """
+
+            # Perform the scrape
+            result = await scraper.smart_scrape(url, custom_selectors, analysis_prompt)
+
+            # Display results
+            print("\n" + "="*50)
+            print("SCRAPING RESULTS")
+            print("="*50)
+            print(f"URL: {result.get('url', 'N/A')}")
+            print(f"Timestamp: {result.get('timestamp', 'N/A')}")
+
+            print("\nEXTRACTED DATA:")
+            print("-" * 30)
+            for key, value in result.get('extracted_data', {}).items():
+                print(f"{key.upper()}:")
+                if isinstance(value, list):
+                    for i, item in enumerate(value[:3]):  # Show first 3 items
+                        print(f"  {i+1}. {item}")
+                    if len(value) > 3:
+                        print(f"  ... and {len(value) - 3} more")
+                else:
+                    print(f"  {value}")
+                print()
+
+            print("\nAI ANALYSIS:")
+            print("-" * 30)
+            print(result.get('ai_analysis', 'No analysis available'))
+
+            # Save results to file
+            with open('scraping_results.json', 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+            print(f"\nResults saved to scraping_results.json")
 
     except Exception as e:
         print(f"Error during scraping: {e}")
