@@ -24,6 +24,7 @@ class GeminiEnhancedScraper:
         # Try to find Chrome binary in common locations
         chrome_paths = [
             '/nix/store/*/bin/google-chrome-stable',
+            '/nix/store/*/bin/google-chrome',
             '/usr/bin/google-chrome',
             '/usr/bin/google-chrome-stable',
             '/usr/bin/chromium',
@@ -31,18 +32,32 @@ class GeminiEnhancedScraper:
         ]
         
         chrome_binary = None
+        print("Searching for Chrome binary...")
         for path in chrome_paths:
             if '*' in path:
                 # Handle Nix store paths with wildcards
-                import glob
                 matches = glob.glob(path)
+                print(f"Checking glob pattern {path}: {matches}")
                 if matches:
                     chrome_binary = matches[0]
+                    print(f"Found Chrome at: {chrome_binary}")
                     break
             else:
+                print(f"Checking path: {path}")
                 if os.path.exists(path):
                     chrome_binary = path
+                    print(f"Found Chrome at: {chrome_binary}")
                     break
+        
+        if not chrome_binary:
+            print("Chrome not found in expected locations. Attempting to use system PATH...")
+            # Try to find chrome in PATH
+            import shutil
+            chrome_binary = shutil.which('google-chrome') or shutil.which('google-chrome-stable') or shutil.which('chromium')
+            if chrome_binary:
+                print(f"Found Chrome in PATH: {chrome_binary}")
+            else:
+                print("Warning: Chrome binary not found. Browser may fail to start.")
         
         browser_args = {
             'headless': True,  # Use headless for Replit
@@ -228,10 +243,15 @@ class GeminiEnhancedScraper:
 
 async def main():
     # Configuration
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'your-gemini-api-key-here')
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
     
-    if GEMINI_API_KEY == 'your-gemini-api-key-here':
-        print("Please set your GEMINI_API_KEY environment variable")
+    if not GEMINI_API_KEY:
+        print("❌ GEMINI_API_KEY environment variable not set!")
+        print("📝 Please add your Gemini API key using the Secrets tool:")
+        print("   1. Click on 'Secrets' in the left sidebar")
+        print("   2. Add a new secret with key: GEMINI_API_KEY")
+        print("   3. Add your Gemini API key as the value")
+        print("   4. Get your API key from: https://makersuite.google.com/app/apikey")
         return
     
     scraper = GeminiEnhancedScraper(GEMINI_API_KEY)
@@ -240,8 +260,8 @@ async def main():
         # Start the browser
         await scraper.start_browser()
         
-        # Example: Scrape a website (replace with your target)
-        url = "https://example.com"  # Replace with your target URL
+        # Test with a simple website first
+        url = "https://httpbin.org/html"  # Simple test page
         
         # Custom selectors for specific data extraction
         custom_selectors = {
