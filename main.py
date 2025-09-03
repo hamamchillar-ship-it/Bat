@@ -18,6 +18,7 @@ class TestScraper:
         print("Starting undetected browser...")
         # Try to find Chrome binary in common locations
         chrome_paths = [
+            '/nix/store/bvqn8vwhfxary4j5ydb9l757jacbql96-google-chrome-138.0.7204.92/bin/google-chrome-stable',
             '/nix/store/*/bin/google-chrome-stable',
             '/nix/store/*/bin/google-chrome',
             '/usr/bin/google-chrome',
@@ -28,29 +29,48 @@ class TestScraper:
 
         chrome_binary = None
         print("Searching for Chrome binary...")
-        for path in chrome_paths:
-            if '*' in path:
-                matches = glob.glob(path)
-                print(f"Checking glob pattern {path}: {matches}")
-                if matches:
-                    chrome_binary = matches[0]
-                    print(f"Found Chrome at: {chrome_binary}")
-                    break
-            else:
-                print(f"Checking path: {path}")
-                if os.path.exists(path):
-                    chrome_binary = path
-                    print(f"Found Chrome at: {chrome_binary}")
-                    break
 
-        if not chrome_binary:
-            print("Chrome not found in expected locations. Attempting to use system PATH...")
-            import shutil
-            chrome_binary = shutil.which('google-chrome') or shutil.which('google-chrome-stable') or shutil.which('chromium')
-            if chrome_binary:
-                print(f"Found Chrome in PATH: {chrome_binary}")
-            else:
-                print("Warning: Chrome binary not found. Browser may fail to start.")
+        try:
+            for path in chrome_paths:
+                if '*' in path:
+                    try:
+                        matches = glob.glob(path)
+                        print(f"Checking glob pattern {path}: {matches}")
+                        if matches:
+                            chrome_binary = matches[0]
+                            print(f"Found Chrome at: {chrome_binary}")
+                            break
+                    except Exception as e:
+                        print(f"Error checking glob pattern {path}: {e}")
+                        continue
+                else:
+                    print(f"Checking path: {path}")
+                    try:
+                        if os.path.exists(path):
+                            chrome_binary = path
+                            print(f"Found Chrome at: {chrome_binary}")
+                            break
+                    except Exception as e:
+                        print(f"Error checking path {path}: {e}")
+                        continue
+
+            if not chrome_binary:
+                print("Chrome not found in expected locations. Attempting to use system PATH...")
+                try:
+                    # Try to find chrome in PATH
+                    import shutil
+                    chrome_binary = shutil.which('google-chrome') or shutil.which('google-chrome-stable') or shutil.which('chromium')
+                    if chrome_binary:
+                        print(f"Found Chrome in PATH: {chrome_binary}")
+                    else:
+                        print("Warning: Chrome binary not found. Browser may fail to start.")
+                except Exception as e:
+                    print(f"Error searching PATH: {e}")
+
+        except Exception as e:
+            print(f"Error during Chrome detection: {e}")
+            print("Proceeding without explicit Chrome path...")
+
 
         browser_args = {
             'headless': True,
@@ -135,6 +155,7 @@ class GeminiEnhancedScraper:
 
         # Try to find Chrome binary in common locations
         chrome_paths = [
+            '/nix/store/bvqn8vwhfxary4j5ydb9l757jacbql96-google-chrome-138.0.7204.92/bin/google-chrome-stable',
             '/nix/store/*/bin/google-chrome-stable',
             '/nix/store/*/bin/google-chrome',
             '/usr/bin/google-chrome',
@@ -145,31 +166,47 @@ class GeminiEnhancedScraper:
 
         chrome_binary = None
         print("Searching for Chrome binary...")
-        for path in chrome_paths:
-            if '*' in path:
-                # Handle Nix store paths with wildcards
-                matches = glob.glob(path)
-                print(f"Checking glob pattern {path}: {matches}")
-                if matches:
-                    chrome_binary = matches[0]
-                    print(f"Found Chrome at: {chrome_binary}")
-                    break
-            else:
-                print(f"Checking path: {path}")
-                if os.path.exists(path):
-                    chrome_binary = path
-                    print(f"Found Chrome at: {chrome_binary}")
-                    break
+        try:
+            for path in chrome_paths:
+                if '*' in path:
+                    try:
+                        matches = glob.glob(path)
+                        print(f"Checking glob pattern {path}: {matches}")
+                        if matches:
+                            chrome_binary = matches[0]
+                            print(f"Found Chrome at: {chrome_binary}")
+                            break
+                    except Exception as e:
+                        print(f"Error checking glob pattern {path}: {e}")
+                        continue
+                else:
+                    print(f"Checking path: {path}")
+                    try:
+                        if os.path.exists(path):
+                            chrome_binary = path
+                            print(f"Found Chrome at: {chrome_binary}")
+                            break
+                    except Exception as e:
+                        print(f"Error checking path {path}: {e}")
+                        continue
 
-        if not chrome_binary:
-            print("Chrome not found in expected locations. Attempting to use system PATH...")
-            # Try to find chrome in PATH
-            import shutil
-            chrome_binary = shutil.which('google-chrome') or shutil.which('google-chrome-stable') or shutil.which('chromium')
-            if chrome_binary:
-                print(f"Found Chrome in PATH: {chrome_binary}")
-            else:
-                print("Warning: Chrome binary not found. Browser may fail to start.")
+            if not chrome_binary:
+                print("Chrome not found in expected locations. Attempting to use system PATH...")
+                try:
+                    # Try to find chrome in PATH
+                    import shutil
+                    chrome_binary = shutil.which('google-chrome') or shutil.which('google-chrome-stable') or shutil.which('chromium')
+                    if chrome_binary:
+                        print(f"Found Chrome in PATH: {chrome_binary}")
+                    else:
+                        print("Warning: Chrome binary not found. Browser may fail to start.")
+                except Exception as e:
+                    print(f"Error searching PATH: {e}")
+
+        except Exception as e:
+            print(f"Error during Chrome detection: {e}")
+            print("Proceeding without explicit Chrome path...")
+
 
         browser_args = {
             'headless': True,  # Use headless for Replit
@@ -345,7 +382,7 @@ class GeminiEnhancedScraper:
         except Exception as e:
             return f"Error analyzing with Gemini: {e}"
 
-    async def smart_scrape(self, url: str, custom_selectors: Dict[str, str] = None, 
+    async def smart_scrape(self, url: str, custom_selectors: Dict[str, str] = None,
                           analysis_prompt: str = None) -> Dict[str, Any]:
         """Perform intelligent scraping with Gemini analysis"""
         print(f"Starting smart scrape of {url}")
