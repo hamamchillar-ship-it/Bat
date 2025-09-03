@@ -75,6 +75,7 @@ class TestScraper:
         browser_args = {
             'headless': True,
             'user_data_dir': None,
+            'no_sandbox': True,  # Required for running as root in Replit
             'args': [
                 '--no-sandbox',
                 '--disable-dev-shm-usage',
