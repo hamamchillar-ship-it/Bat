@@ -56,21 +56,23 @@ class TestScraper:
             'headless': True,
             'user_data_dir': None,
             'args': [
-                '--no-first-run',
-                '--no-default-browser-check',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--disable-extensions',
                 '--no-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--disable-software-rasterizer',
-                '--single-process',
+                '--disable-extensions',
                 '--disable-background-timer-throttling',
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding',
-                '--virtual-time-budget=5000'
+                '--disable-ipc-flooding-protection',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-sync',
+                '--force-color-profile=srgb',
+                '--metrics-recording-only',
+                '--disable-background-networking',
+                '--enable-logging',
+                '--log-level=0'
             ]
         }
 
@@ -80,16 +82,22 @@ class TestScraper:
 
         try:
             print("Starting browser with nodriver...")
-            self.browser = await asyncio.wait_for(uc.start(**browser_args), timeout=30)
-            print("Browser started, getting initial page...")
-            self.page = await asyncio.wait_for(self.browser.get('about:blank'), timeout=15)
+            self.browser = await asyncio.wait_for(uc.start(**browser_args), timeout=60)
+            print("Browser started successfully!")
+
+            print("Getting initial page...")
+            self.page = self.browser.main_tab
+            if not self.page:
+                self.page = await asyncio.wait_for(self.browser.get('about:blank'), timeout=20)
             print("Initial page loaded successfully!")
+
         except asyncio.TimeoutError:
             print("❌ Browser startup timed out. This might be due to Replit environment limitations.")
             print("💡 Try running again or check if Chrome is properly installed.")
             raise Exception("Browser startup timeout")
         except Exception as e:
             print(f"❌ Failed to start browser: {e}")
+            print(f"Error type: {type(e).__name__}")
             raise
 
     async def simple_test(self, url: str = "https://httpbin.org/html"):
@@ -168,21 +176,23 @@ class GeminiEnhancedScraper:
             'user_data_dir': None,  # Use temporary profile
             # Additional options to avoid detection and work in Replit
             'args': [
-                '--no-first-run',
-                '--no-default-browser-check',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--disable-extensions',
                 '--no-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--disable-software-rasterizer',
-                '--single-process',  # Important for Replit
+                '--disable-extensions',
                 '--disable-background-timer-throttling',
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding',
-                '--virtual-time-budget=5000'
+                '--disable-ipc-flooding-protection',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-sync',
+                '--force-color-profile=srgb',
+                '--metrics-recording-only',
+                '--disable-background-networking',
+                '--enable-logging',
+                '--log-level=0'
             ]
         }
 
@@ -192,16 +202,22 @@ class GeminiEnhancedScraper:
 
         try:
             print("Starting browser with nodriver...")
-            self.browser = await asyncio.wait_for(uc.start(**browser_args), timeout=30)
-            print("Browser started, getting initial page...")
-            self.page = await asyncio.wait_for(self.browser.get('about:blank'), timeout=15)
+            self.browser = await asyncio.wait_for(uc.start(**browser_args), timeout=60)
+            print("Browser started successfully!")
+
+            print("Getting initial page...")
+            self.page = self.browser.main_tab
+            if not self.page:
+                self.page = await asyncio.wait_for(self.browser.get('about:blank'), timeout=20)
             print("Initial page loaded successfully!")
+
         except asyncio.TimeoutError:
             print("❌ Browser startup timed out. This might be due to Replit environment limitations.")
             print("💡 Try running again or check if Chrome is properly installed.")
             raise Exception("Browser startup timeout")
         except Exception as e:
             print(f"❌ Failed to start browser: {e}")
+            print(f"Error type: {type(e).__name__}")
             raise
 
         # Execute stealth scripts to avoid detection
