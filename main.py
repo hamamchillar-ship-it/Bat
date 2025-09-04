@@ -72,44 +72,13 @@ class TestScraper:
             print("Proceeding without explicit Chrome path...")
 
 
+        # Configure for Replit environment with proper nodriver settings
         browser_args = {
             'headless': True,
-            'user_data_dir': None,
-            'no_sandbox': True,  # Add this for Replit compatibility
-            'args': [
-                '--no-sandbox',  # Keep this too for extra safety
-                '--disable-setuid-sandbox',
-                '--disable-seccomp-filter-sandbox',
-                '--disable-namespace-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',  # Important for Replit
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--disable-extensions',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--disable-features=TranslateUI',
-                '--disable-ipc-flooding-protection',
-                '--disable-hang-monitor',
-                '--disable-prompt-on-repost',
-                '--disable-sync',
-                '--force-color-profile=srgb',
-                '--metrics-recording-only',
-                '--disable-background-networking',
-                '--enable-logging',
-                '--log-level=0',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-web-security',
-                '--allow-running-insecure-content',
-                '--disable-features=VizDisplayCompositor,site-per-process',
-                '--disable-default-apps',
-                '--disable-component-extensions-with-background-pages',
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
-            ]
+            'no_sandbox': True,  # Critical for Replit
+            'user_data_dir': '/tmp/chrome_profile',  # Use specific temp directory
+            'lang': 'en-US',
+            'version_main': None,  # Let nodriver choose version
         }
 
         if chrome_binary:
@@ -118,22 +87,22 @@ class TestScraper:
 
         try:
             print("Starting browser with nodriver...")
-            self.browser = await asyncio.wait_for(uc.start(**browser_args), timeout=60)
+            # Create browser instance with simplified configuration for Replit
+            self.browser = await uc.start(**browser_args)
             print("Browser started successfully!")
 
-            print("Getting initial page...")
+            # Get the main tab (should be available immediately)
             self.page = self.browser.main_tab
-            if not self.page:
-                self.page = await asyncio.wait_for(self.browser.get('about:blank'), timeout=20)
-            print("Initial page loaded successfully!")
+            print("Initial page ready!")
 
-        except asyncio.TimeoutError:
-            print("❌ Browser startup timed out. This might be due to Replit environment limitations.")
-            print("💡 Try running again or check if Chrome is properly installed.")
-            raise Exception("Browser startup timeout")
+            # Navigate to a simple page to verify it's working
+            await self.page.get('about:blank')
+            print("Browser is fully operational!")
+
         except Exception as e:
             print(f"❌ Failed to start browser: {e}")
-            print(f"Error type: {type(e).__name__}")
+            print("💡 This could be due to Replit environment constraints.")
+            print("💡 nodriver requires specific permissions that may not be available.")
             raise
 
     async def simple_test(self, url: str = "https://httpbin.org/html"):
@@ -270,22 +239,22 @@ class GeminiEnhancedScraper:
 
         try:
             print("Starting browser with nodriver...")
-            self.browser = await asyncio.wait_for(uc.start(**browser_args), timeout=60)
+            # Create browser instance with simplified configuration for Replit
+            self.browser = await uc.start(**browser_args)
             print("Browser started successfully!")
 
-            print("Getting initial page...")
+            # Get the main tab (should be available immediately)
             self.page = self.browser.main_tab
-            if not self.page:
-                self.page = await asyncio.wait_for(self.browser.get('about:blank'), timeout=20)
-            print("Initial page loaded successfully!")
+            print("Initial page ready!")
 
-        except asyncio.TimeoutError:
-            print("❌ Browser startup timed out. This might be due to Replit environment limitations.")
-            print("💡 Try running again or check if Chrome is properly installed.")
-            raise Exception("Browser startup timeout")
+            # Navigate to a simple page to verify it's working
+            await self.page.get('about:blank')
+            print("Browser is fully operational!")
+
         except Exception as e:
             print(f"❌ Failed to start browser: {e}")
-            print(f"Error type: {type(e).__name__}")
+            print("💡 This could be due to Replit environment constraints.")
+            print("💡 nodriver requires specific permissions that may not be available.")
             raise
 
         # Execute enhanced stealth scripts to avoid detection
@@ -430,7 +399,7 @@ class GeminiEnhancedScraper:
             f"document.querySelectorAll('{selector}').length > 0",
             f"!!document.querySelector('{selector}')"
         ]
-        
+
         for strategy in strategies:
             try:
                 await self.page.wait_for(expression=strategy, timeout=timeout * 1000)
@@ -447,25 +416,25 @@ class GeminiEnhancedScraper:
             '[class*="cookie"] button[class*="accept"]',
             '[id*="cookie"] button[id*="allow"]',
             'button[data-testid*="cookie-accept"]',
-            
+
             # Age verification
             '[class*="age-verify"] button',
             '[id*="age-confirm"] button',
             'button[class*="confirm-age"]',
-            
+
             # General popup close buttons
             '[class*="modal"] [class*="close"]',
             '[class*="popup"] [class*="close"]',
             '[class*="overlay"] [class*="close"]',
             'button[aria-label*="close"]',
             '[data-dismiss="modal"]',
-            
+
             # Newsletter signups
             '[class*="newsletter"] [class*="close"]',
             '[class*="signup"] [class*="close"]',
             '[id*="newsletter"] [class*="close"]'
         ]
-        
+
         handled = False
         for selector in overlay_selectors:
             try:
@@ -478,7 +447,7 @@ class GeminiEnhancedScraper:
                     break
             except:
                 continue
-        
+
         return handled
 
     async def intelligent_scroll(self, strategy: str = "progressive") -> None:
@@ -487,25 +456,25 @@ class GeminiEnhancedScraper:
             # Progressive scrolling to load lazy content
             viewport_height = await self.page.evaluate('window.innerHeight')
             page_height = await self.page.evaluate('document.body.scrollHeight')
-            
+
             current_position = 0
             scroll_step = viewport_height // 2
-            
+
             while current_position < page_height:
                 await self.page.evaluate(f'window.scrollTo(0, {current_position})')
                 await asyncio.sleep(0.5)
                 current_position += scroll_step
-                
+
                 # Check if new content loaded
                 new_height = await self.page.evaluate('document.body.scrollHeight')
                 if new_height > page_height:
                     page_height = new_height
-                    
+
         elif strategy == "bottom_trigger":
             # Scroll to bottom to trigger infinite scroll
             await self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
             await asyncio.sleep(2)
-            
+
         elif strategy == "hover_trigger":
             # Hover over elements to trigger dynamic content
             interactive_elements = await self.page.select_all('a, button, [data-*], [class*="hover"]')
@@ -520,13 +489,13 @@ class GeminiEnhancedScraper:
         """Enhanced data extraction with dynamic content handling"""
         # Handle overlays first
         await self.handle_common_overlays()
-        
+
         # Progressive scroll to load content
         await self.intelligent_scroll("progressive")
-        
+
         # Wait for potential dynamic content
         await asyncio.sleep(2)
-        
+
         # Extract data with enhanced selectors
         if not selectors:
             selectors = {
@@ -540,9 +509,9 @@ class GeminiEnhancedScraper:
                 'forms': 'form, [class*="form"], input[type="email"], input[type="search"]',
                 'social': '[class*="social"] a, [href*="facebook"], [href*="twitter"], [href*="instagram"]'
             }
-        
+
         extracted_data = {}
-        
+
         for key, selector in selectors.items():
             try:
                 elements = await self.page.select_all(selector)
@@ -560,7 +529,7 @@ class GeminiEnhancedScraper:
                                     match = re.search(r'url\(["\']?([^"\']+)["\']?\)', style)
                                     if match:
                                         src = match.group(1)
-                            
+
                             if src:
                                 images.append({
                                     'src': src,
@@ -569,14 +538,14 @@ class GeminiEnhancedScraper:
                                     'height': await elem.get_attribute('height') or ''
                                 })
                         extracted_data[key] = images
-                        
+
                     elif key == 'forms':
                         forms = []
                         for elem in elements[:5]:
                             action = await elem.get_attribute('action')
                             method = await elem.get_attribute('method')
                             form_inputs = await elem.select_all('input, select, textarea')
-                            
+
                             input_data = []
                             for inp in form_inputs:
                                 input_type = await inp.get_attribute('type')
@@ -588,21 +557,21 @@ class GeminiEnhancedScraper:
                                         'name': name,
                                         'placeholder': placeholder or ''
                                     })
-                            
+
                             forms.append({
                                 'action': action or '',
                                 'method': method or 'GET',
                                 'inputs': input_data
                             })
                         extracted_data[key] = forms
-                        
+
                     elif key == 'products':
                         products = []
                         for elem in elements[:10]:
                             # Try to extract product information
                             name_elem = await elem.select('h1, h2, h3, [class*="name"], [class*="title"]')
                             price_elem = await elem.select('[class*="price"], .currency, [data-price]')
-                            
+
                             product_data = {
                                 'name': await name_elem[0].get_attribute('textContent') if name_elem else '',
                                 'price': await price_elem[0].get_attribute('textContent') if price_elem else '',
@@ -610,7 +579,7 @@ class GeminiEnhancedScraper:
                             }
                             products.append(product_data)
                         extracted_data[key] = products
-                        
+
                     else:
                         # Standard text extraction
                         texts = []
@@ -719,7 +688,7 @@ class GeminiEnhancedScraper:
                         if action == 'stop':
                             print("AI decided to stop - target content reached")
                             break
-                            
+
                         elif action == 'click':
                             selector = decision.get('selector')
                             if selector:
@@ -736,11 +705,11 @@ class GeminiEnhancedScraper:
                                         print(f"❌ Element not found: {selector}")
                                 else:
                                     print(f"⏳ Timeout waiting for: {selector}")
-                                    
+
                         elif action == 'fill_form':
                             form_selector = decision.get('selector', 'form')
                             form_data = decision.get('form_data', {})
-                            
+
                             forms = await self.page.select_all(form_selector)
                             if forms and form_data:
                                 form = forms[0]
@@ -753,7 +722,7 @@ class GeminiEnhancedScraper:
                                             f'#{field_name}',
                                             f'.{field_name}'
                                         ]
-                                        
+
                                         for field_selector in field_selectors:
                                             fields = await form.select_all(field_selector)
                                             if fields:
@@ -762,26 +731,26 @@ class GeminiEnhancedScraper:
                                                 break
                                     except Exception as e:
                                         print(f"❌ Error filling {field_name}: {e}")
-                                
+
                                 # Try to submit form
                                 submit_buttons = await form.select_all('input[type="submit"], button[type="submit"], button:not([type])')
                                 if submit_buttons:
                                     await submit_buttons[0].click()
                                     await asyncio.sleep(3)
                                     print("✅ Form submitted")
-                                    
+
                         elif action == 'scroll_load':
                             await self.intelligent_scroll("bottom_trigger")
                             await asyncio.sleep(3)
                             print("✅ Scrolled to load more content")
-                            
+
                         elif action == 'navigate':
                             new_url = decision.get('url')
                             if new_url:
                                 await self.page.get(new_url)
                                 await asyncio.sleep(3)
                                 print(f"✅ Navigated to: {new_url}")
-                                
+
                         elif action == 'wait_for':
                             wait_selector = decision.get('wait_element')
                             if wait_selector:
@@ -789,7 +758,7 @@ class GeminiEnhancedScraper:
                                     print(f"✅ Element appeared: {wait_selector}")
                                 else:
                                     print(f"⏳ Timeout waiting for: {wait_selector}")
-                                    
+
                         elif action == 'extract':
                             print("✅ AI triggered data extraction")
                             # Continue to extract at the end
