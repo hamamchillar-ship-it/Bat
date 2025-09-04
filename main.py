@@ -78,13 +78,19 @@ class TestScraper:
             'no_sandbox': True,  # Required for running as root in Replit
             'args': [
                 '--no-sandbox',
+                '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',  # Important for Replit
                 '--disable-gpu',
                 '--disable-software-rasterizer',
                 '--disable-extensions',
                 '--disable-background-timer-throttling',
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding',
+                '--disable-features=TranslateUI',
                 '--disable-ipc-flooding-protection',
                 '--disable-hang-monitor',
                 '--disable-prompt-on-repost',
@@ -97,7 +103,10 @@ class TestScraper:
                 '--disable-blink-features=AutomationControlled',
                 '--disable-web-security',
                 '--allow-running-insecure-content',
-                '--disable-features=VizDisplayCompositor'
+                '--disable-features=VizDisplayCompositor,site-per-process',
+                '--disable-default-apps',
+                '--disable-component-extensions-with-background-pages',
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
             ]
         }
 
@@ -216,16 +225,22 @@ class GeminiEnhancedScraper:
         browser_args = {
             'headless': True,  # Use headless for Replit
             'user_data_dir': None,  # Use temporary profile
-            # Additional options to avoid detection and work in Replit
+            'no_sandbox': True,
             'args': [
                 '--no-sandbox',
+                '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',  # Important for Replit
                 '--disable-gpu',
                 '--disable-software-rasterizer',
                 '--disable-extensions',
                 '--disable-background-timer-throttling',
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding',
+                '--disable-features=TranslateUI',
                 '--disable-ipc-flooding-protection',
                 '--disable-hang-monitor',
                 '--disable-prompt-on-repost',
@@ -234,7 +249,14 @@ class GeminiEnhancedScraper:
                 '--metrics-recording-only',
                 '--disable-background-networking',
                 '--enable-logging',
-                '--log-level=0'
+                '--log-level=0',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-web-security',
+                '--allow-running-insecure-content',
+                '--disable-features=VizDisplayCompositor,site-per-process',
+                '--disable-default-apps',
+                '--disable-component-extensions-with-background-pages',
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
             ]
         }
 
@@ -262,23 +284,64 @@ class GeminiEnhancedScraper:
             print(f"Error type: {type(e).__name__}")
             raise
 
-        # Execute stealth scripts to avoid detection
+        # Execute enhanced stealth scripts to avoid detection
         await self.page.evaluate("""
+            // Remove webdriver property
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined,
             });
 
+            // Add chrome object
             window.chrome = {
                 runtime: {},
+                app: {
+                    isInstalled: false,
+                },
+                webstore: {
+                    onInstallStageChanged: {},
+                    onDownloadProgress: {},
+                }
             };
 
+            // Override plugins
             Object.defineProperty(navigator, 'plugins', {
                 get: () => [1, 2, 3, 4, 5],
             });
 
+            // Override languages
             Object.defineProperty(navigator, 'languages', {
                 get: () => ['en-US', 'en'],
             });
+
+            // Override permissions
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+
+            // Override getUserMedia
+            Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+                writable: true,
+                configurable: true,
+                value: () => Promise.reject(new Error('Permission denied'))
+            });
+
+            // Override connection
+            Object.defineProperty(navigator, 'connection', {
+                get: () => ({
+                    effectiveType: '4g',
+                    rtt: 50,
+                    downlink: 10,
+                    saveData: false
+                })
+            });
+
+            // Remove automation indicators
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
         """)
 
         print("Browser started successfully!")
@@ -290,25 +353,68 @@ class GeminiEnhancedScraper:
                 print(f"Navigating to {url} (attempt {attempt + 1})")
                 await self.page.get(url, timeout=30000)
 
-                # Wait for page load and check for Cloudflare
+                # Wait for initial page load
                 await asyncio.sleep(3)
 
-                # Check if we hit Cloudflare protection
+                # Check for Cloudflare protection patterns
                 page_content = await self.page.get_content()
-                if "cloudflare" in page_content.lower() or "challenge" in page_content.lower():
-                    print("Cloudflare detected, waiting for challenge resolution...")
-                    await asyncio.sleep(10)  # Wait for challenge to complete
+                cf_indicators = [
+                    'cloudflare', 'challenge', 'checking your browser',
+                    'ddos protection', 'cf-browser-verification',
+                    'cf-challenge-running', 'ray id:', 'please wait',
+                    'security check', 'browser verification'
+                ]
+                
+                if any(indicator in page_content.lower() for indicator in cf_indicators):
+                    print("🛡️ Cloudflare protection detected, attempting bypass...")
+                    
+                    # Wait for challenge resolution
+                    for wait_time in [5, 10, 15]:
+                        await asyncio.sleep(wait_time)
+                        current_content = await self.page.get_content()
+                        
+                        # Check if we're still on a challenge page
+                        if not any(indicator in current_content.lower() for indicator in cf_indicators):
+                            print("✅ Cloudflare challenge bypassed!")
+                            break
+                        else:
+                            print(f"⏳ Still waiting for challenge resolution... ({wait_time}s)")
+                    
+                    # Try clicking the verification button if it exists
+                    try:
+                        verify_selectors = [
+                            'input[type="button"][value*="Verify"]',
+                            'button[type="submit"]',
+                            '.cf-button',
+                            '#challenge-form input[type="submit"]'
+                        ]
+                        
+                        for selector in verify_selectors:
+                            elements = await self.page.select_all(selector)
+                            if elements:
+                                print(f"🖱️ Clicking verification button: {selector}")
+                                await elements[0].click()
+                                await asyncio.sleep(5)
+                                break
+                    except Exception as e:
+                        print(f"Could not click verification button: {e}")
 
-                # Verify we can access the page
-                await self.page.wait_for(selector='body', timeout=10000)
-                print("Successfully navigated to page!")
-                return True
+                # Final verification that we can access the page
+                try:
+                    await self.page.wait_for(selector='body', timeout=10000)
+                    final_url = await self.page.evaluate('window.location.href')
+                    print(f"✅ Successfully navigated to: {final_url}")
+                    return True
+                except:
+                    pass
 
             except Exception as e:
-                print(f"Navigation attempt {attempt + 1} failed: {e}")
+                print(f"❌ Navigation attempt {attempt + 1} failed: {e}")
                 if attempt < max_retries - 1:
+                    print(f"⏳ Retrying in 5 seconds...")
                     await asyncio.sleep(5)
                 else:
+                    print("❌ All navigation attempts failed")
                     return False
 
         return False
