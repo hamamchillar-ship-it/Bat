@@ -93,7 +93,11 @@ class TestScraper:
                 '--metrics-recording-only',
                 '--disable-background-networking',
                 '--enable-logging',
-                '--log-level=0'
+                '--log-level=0',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-web-security',
+                '--allow-running-insecure-content',
+                '--disable-features=VizDisplayCompositor'
             ]
         }
 
@@ -309,6 +313,121 @@ class GeminiEnhancedScraper:
 
         return False
 
+    async def auto_navigate_traffic(self, url: str) -> Dict[str, Any]:
+        """Automatically navigate through complex website traffic using Gemini AI"""
+        print(f"Starting intelligent navigation for {url}")
+        
+        if not await self.navigate_with_retry(url):
+            return {'error': 'Failed initial navigation'}
+
+        navigation_log = []
+        current_url = url
+        
+        for step in range(5):  # Max 5 navigation steps
+            try:
+                # Take screenshot and analyze page
+                await asyncio.sleep(2)
+                page_content = await self.page.get_content()
+                current_url = await self.page.evaluate('window.location.href')
+                
+                # Get page analysis from Gemini
+                analysis_prompt = f"""
+                Analyze this webpage content and determine next navigation steps:
+                
+                Current URL: {current_url}
+                Step: {step + 1}/5
+                
+                Webpage HTML (first 3000 chars):
+                {page_content[:3000]}
+                
+                Instructions:
+                1. Identify if this is a blocking page (CAPTCHA, age verification, cookie consent, etc.)
+                2. Look for navigation elements (buttons, links, forms)
+                3. Suggest the best action to take:
+                   - Click a specific element (provide selector)
+                   - Fill a form (provide selectors and values)
+                   - Wait for something to load
+                   - Navigate to a different URL
+                   - Stop here (if we've reached target content)
+                
+                Respond with JSON format:
+                {{
+                    "action": "click|fill|wait|navigate|stop",
+                    "selector": "CSS selector if needed",
+                    "value": "text to fill if needed",
+                    "url": "URL to navigate to if needed",
+                    "reasoning": "why this action"
+                }}
+                """
+                
+                ai_decision = self.analyze_with_gemini({'content': page_content[:2000]}, analysis_prompt)
+                navigation_log.append({
+                    'step': step + 1,
+                    'url': current_url,
+                    'ai_decision': ai_decision
+                })
+                
+                print(f"Step {step + 1}: AI Decision - {ai_decision[:200]}...")
+                
+                # Try to parse AI decision as JSON and execute
+                try:
+                    import json
+                    import re
+                    
+                    # Extract JSON from AI response
+                    json_match = re.search(r'\{.*\}', ai_decision, re.DOTALL)
+                    if json_match:
+                        decision = json.loads(json_match.group())
+                        
+                        if decision.get('action') == 'stop':
+                            print("AI decided to stop navigation - target reached")
+                            break
+                        elif decision.get('action') == 'click':
+                            selector = decision.get('selector')
+                            if selector:
+                                elements = await self.page.select_all(selector)
+                                if elements:
+                                    await elements[0].click()
+                                    await asyncio.sleep(3)
+                                    print(f"Clicked element: {selector}")
+                        elif decision.get('action') == 'fill':
+                            selector = decision.get('selector')
+                            value = decision.get('value')
+                            if selector and value:
+                                elements = await self.page.select_all(selector)
+                                if elements:
+                                    await elements[0].send_keys(value)
+                                    await asyncio.sleep(2)
+                                    print(f"Filled {selector} with {value}")
+                        elif decision.get('action') == 'navigate':
+                            new_url = decision.get('url')
+                            if new_url:
+                                await self.page.get(new_url)
+                                await asyncio.sleep(3)
+                                print(f"Navigated to: {new_url}")
+                        elif decision.get('action') == 'wait':
+                            print("AI decided to wait...")
+                            await asyncio.sleep(5)
+                            
+                except (json.JSONDecodeError, KeyError) as e:
+                    print(f"Could not parse AI decision: {e}")
+                    # Fallback: just wait and continue
+                    await asyncio.sleep(3)
+                    
+            except Exception as e:
+                print(f"Error in navigation step {step + 1}: {e}")
+                break
+        
+        # Final data extraction
+        final_data = await self.extract_data()
+        
+        return {
+            'navigation_log': navigation_log,
+            'final_url': current_url,
+            'final_data': final_data,
+            'steps_completed': len(navigation_log)
+        }
+
     async def extract_data(self, selectors: Dict[str, str] = None) -> Dict[str, Any]:
         """Extract data from the current page"""
         if not selectors:
@@ -445,52 +564,87 @@ async def main():
             else:
                 print("\n❌ Browser test failed")
         else:
-            # Full scraping with AI analysis
-            url = "https://httpbin.org/html"  # Simple test page
-
-            # Custom selectors for specific data extraction
-            custom_selectors = {
-                'title': 'title',
-                'main_content': 'main, article, .content',
-                'navigation': 'nav a',
-                'metadata': 'meta[name="description"]'
-            }
-
-            # Custom analysis prompt
-            analysis_prompt = """
-            Please analyze this webpage and:
-            1. Identify the main topic and purpose
-            2. Extract any contact information, prices, or important data
-            3. Suggest what other pages might be worth scraping
-            4. Identify any potential data patterns or structures
-            """
-
-            # Perform the scrape
-            result = await scraper.smart_scrape(url, custom_selectors, analysis_prompt)
+            # Choose navigation mode
+            print("\n🚀 Choose navigation mode:")
+            print("1. Simple scrape (direct URL)")
+            print("2. Auto-navigate through traffic (AI-powered)")
+            
+            # For demo, let's use auto-navigation
+            mode = 2  # You can change this or make it user input
+            
+            if mode == 1:
+                # Simple scraping
+                url = "https://httpbin.org/html"
+                custom_selectors = {
+                    'title': 'title',
+                    'main_content': 'main, article, .content',
+                    'navigation': 'nav a',
+                    'metadata': 'meta[name="description"]'
+                }
+                analysis_prompt = """
+                Please analyze this webpage and:
+                1. Identify the main topic and purpose
+                2. Extract any contact information, prices, or important data
+                3. Suggest what other pages might be worth scraping
+                4. Identify any potential data patterns or structures
+                """
+                result = await scraper.smart_scrape(url, custom_selectors, analysis_prompt)
+            else:
+                # Auto-navigation with AI
+                url = "https://example.com"  # Change to target site
+                print(f"🤖 Starting AI-powered navigation for: {url}")
+                result = await scraper.auto_navigate_traffic(url)
 
             # Display results
             print("\n" + "="*50)
             print("SCRAPING RESULTS")
             print("="*50)
-            print(f"URL: {result.get('url', 'N/A')}")
-            print(f"Timestamp: {result.get('timestamp', 'N/A')}")
+            
+            if 'navigation_log' in result:
+                # Auto-navigation results
+                print(f"Final URL: {result.get('final_url', 'N/A')}")
+                print(f"Steps completed: {result.get('steps_completed', 0)}")
+                
+                print("\nNAVIGATION LOG:")
+                print("-" * 30)
+                for log_entry in result.get('navigation_log', []):
+                    print(f"Step {log_entry['step']}: {log_entry['url']}")
+                    print(f"  AI Decision: {log_entry['ai_decision'][:100]}...")
+                    print()
+                
+                print("\nFINAL EXTRACTED DATA:")
+                print("-" * 30)
+                for key, value in result.get('final_data', {}).items():
+                    print(f"{key.upper()}:")
+                    if isinstance(value, list):
+                        for i, item in enumerate(value[:3]):
+                            print(f"  {i+1}. {item}")
+                        if len(value) > 3:
+                            print(f"  ... and {len(value) - 3} more")
+                    else:
+                        print(f"  {value}")
+                    print()
+            else:
+                # Regular scraping results
+                print(f"URL: {result.get('url', 'N/A')}")
+                print(f"Timestamp: {result.get('timestamp', 'N/A')}")
 
-            print("\nEXTRACTED DATA:")
-            print("-" * 30)
-            for key, value in result.get('extracted_data', {}).items():
-                print(f"{key.upper()}:")
-                if isinstance(value, list):
-                    for i, item in enumerate(value[:3]):  # Show first 3 items
-                        print(f"  {i+1}. {item}")
-                    if len(value) > 3:
-                        print(f"  ... and {len(value) - 3} more")
-                else:
-                    print(f"  {value}")
-                print()
+                print("\nEXTRACTED DATA:")
+                print("-" * 30)
+                for key, value in result.get('extracted_data', {}).items():
+                    print(f"{key.upper()}:")
+                    if isinstance(value, list):
+                        for i, item in enumerate(value[:3]):  # Show first 3 items
+                            print(f"  {i+1}. {item}")
+                        if len(value) > 3:
+                            print(f"  ... and {len(value) - 3} more")
+                    else:
+                        print(f"  {value}")
+                    print()
 
-            print("\nAI ANALYSIS:")
-            print("-" * 30)
-            print(result.get('ai_analysis', 'No analysis available'))
+                print("\nAI ANALYSIS:")
+                print("-" * 30)
+                print(result.get('ai_analysis', 'No analysis available'))
 
             # Save results to file
             with open('scraping_results.json', 'w', encoding='utf-8') as f:
