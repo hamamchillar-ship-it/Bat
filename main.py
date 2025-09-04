@@ -75,8 +75,9 @@ class TestScraper:
         browser_args = {
             'headless': True,
             'user_data_dir': None,
+            'no_sandbox': True,  # Add this for Replit compatibility
             'args': [
-                '--no-sandbox',  # Move this to args list for proper handling
+                '--no-sandbox',  # Keep this too for extra safety
                 '--disable-setuid-sandbox',
                 '--disable-seccomp-filter-sandbox',
                 '--disable-namespace-sandbox',
@@ -226,6 +227,7 @@ class GeminiEnhancedScraper:
         browser_args = {
             'headless': True,  # Use headless for Replit
             'user_data_dir': None,  # Use temporary profile
+            'no_sandbox': True,  # Add this for Replit compatibility
             'args': [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
