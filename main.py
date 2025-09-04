@@ -22,7 +22,6 @@ class GeminiEnhancedScraper:
         """Initialize the scraper with Gemini AI integration"""
         self.gemini_api_key = gemini_api_key
         genai.configure(api_key=gemini_api_key)
-        # <<< --- AI MODEL UPDATED HERE --- >>>
         self.model = genai.GenerativeModel('gemini-1.5-flash-latest')
         self.browser = None
         self.page = None
@@ -39,7 +38,6 @@ class GeminiEnhancedScraper:
             ]
         }
         try:
-            # Check for system-installed Chrome first
             import shutil
             chrome_path = shutil.which('google-chrome') or shutil.which('chromium')
             if chrome_path:
@@ -76,12 +74,21 @@ class GeminiEnhancedScraper:
           "data_to_extract": ["product_name", "price", "rating", "reviews_count", "product_url"]
         }}
         """
-        response = None # Define response here to access it in except block
+        response = None
         try:
             response = self.model.generate_content(prompt)
-            plan = json.loads(response.text)
-            print(f"✅ AI Plan Generated:\n{json.dumps(plan, indent=2)}")
-            return plan
+            # <<< --- FIX APPLIED HERE --- >>>
+            # Use regex to find the JSON object, as AI can add markdown formatting
+            json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+            if json_match:
+                plan = json.loads(json_match.group())
+                print(f"✅ AI Plan Generated:\n{json.dumps(plan, indent=2)}")
+                return plan
+            else:
+                print("❌ AI did not return a valid JSON object.")
+                if response:
+                    print(f"Raw AI response was: {response.text}")
+                return None
         except (json.JSONDecodeError, KeyError, Exception) as e:
             print(f"❌ Error generating or parsing AI plan: {e}")
             if response:
@@ -93,9 +100,8 @@ class GeminiEnhancedScraper:
         AI Extractor: Takes HTML and a list of fields, then extracts the data.
         """
         print(f"🧠 Step 3: Extracting data from HTML using AI...")
-        # Reduce HTML size to avoid exceeding token limits
         simplified_html = re.sub(r'\s{2,}', ' ', html_content)[:20000]
-        response = None # Define response here
+        response = None
         prompt = f"""
         You are an expert data extraction AI. From the provided HTML content, extract the information for each item you can find.
         The data points to extract are: {', '.join(fields)}.
@@ -104,22 +110,10 @@ class GeminiEnhancedScraper:
         "{simplified_html}"
 
         Respond ONLY with a JSON list of objects. Each object represents one item.
-        The keys in each object should be the requested fields.
-        If a value is not found for a specific field, use `null`.
-        Example format:
-        [
-          {{
-            "product_name": "Example Product 1",
-            "price": "$19.99",
-            "rating": "4.5 out of 5 stars",
-            "reviews_count": "150",
-            "product_url": "https://example.com/product1"
-          }}
-        ]
+        The keys in each object should be the requested fields. If a value is not found, use `null`.
         """
         try:
             response = self.model.generate_content(prompt)
-            # Use regex to find the JSON block, as AI can sometimes add extra text
             json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
             if json_match:
                 extracted_data = json.loads(json_match.group())
@@ -140,9 +134,9 @@ class GeminiEnhancedScraper:
         print("📜 Scrolling page to load dynamic content...")
         try:
             last_height = await self.page.evaluate('document.body.scrollHeight')
-            for _ in range(3): # Scroll 3 times
+            for _ in range(3):
                 await self.page.evaluate('window.scrollTo(0, document.body.scrollHeight);')
-                await asyncio.sleep(2) # Wait for content to load
+                await asyncio.sleep(2)
                 new_height = await self.page.evaluate('document.body.scrollHeight')
                 if new_height == last_height:
                     break
@@ -150,27 +144,22 @@ class GeminiEnhancedScraper:
         except Exception as e:
             print(f"Could not scroll page: {e}")
 
-
     async def intelligent_scrape(self, query: str):
         """Orchestrates the entire AI-driven scraping process."""
-        # Step 1: Get the plan from the AI
         plan = await self.get_ai_scraping_plan(query)
         if not plan or 'search_url' not in plan:
             return {"error": "Could not create a valid scraping plan."}
 
-        # Step 2: Navigate to the planned URL
         print(f"🧭 Step 2: Navigating to {plan['search_url']}...")
         try:
             await self.page.get(plan['search_url'])
-            await asyncio.sleep(3) # Wait for initial page load
+            await asyncio.sleep(3)
             print("✅ Navigation successful.")
         except Exception as e:
             return {"error": f"Failed to navigate to URL: {e}"}
             
-        # Scroll to load more data
         await self.intelligent_scroll()
 
-        # Step 3: Get HTML and pass to AI Extractor
         html = await self.page.get_content()
         extracted_data = await self.extract_data_with_ai(html, plan['data_to_extract'])
 
@@ -211,7 +200,6 @@ async def run_scraper():
         print("="*50)
         print(json.dumps(result, indent=2))
 
-        # Save results to file
         with open('scraping_results.json', 'w', encoding='utf-8') as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
         print("\n✅ Results saved to scraping_results.json")
@@ -226,10 +214,8 @@ if __name__ == "__main__":
     print("🚀 Gemini AI Enhanced Web Scraper 🚀")
     print("=" * 40)
     
-    # Run the main scraping logic first
     asyncio.run(run_scraper())
     
-    # After scraping is done, start the web server to keep the Render service alive
     print("\n✅ Scraping finished. Starting web server to keep the service running.")
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
