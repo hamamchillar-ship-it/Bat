@@ -4,104 +4,22 @@ import google.generativeai as genai
 import json
 import time
 import glob
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import os
 from flask import Flask
+import re
 
-# --- Add Flask App Setup ---
+# --- Flask App Setup to Keep the Service Alive ---
 app = Flask(__name__)
 
 @app.route('/')
 def hello():
-    # This will be shown if you visit your Render URL after the scrape is done.
-    return "Scraping script has finished its run. Check the logs for output."
-# -------------------------
-
-
-class TestScraper:
-    """Test scraper without Gemini AI for basic browser testing"""
-    def __init__(self):
-        self.browser = None
-        self.page = None
-
-    async def start_browser(self):
-        """Start the undetected browser (same as GeminiEnhancedScraper)"""
-        print("Starting undetected browser...")
-        chrome_paths = [
-            '/nix/store/bvqn8vwhfxary4j5ydb9l757jacbql96-google-chrome-138.0.7204.92/bin/google-chrome-stable',
-            '/nix/store/*/bin/google-chrome-stable',
-            '/nix/store/*/bin/google-chrome',
-            '/usr/bin/google-chrome',
-            '/usr/bin/google-chrome-stable',
-            '/usr/bin/chromium',
-            '/usr/bin/chromium-browser'
-        ]
-        chrome_binary = None
-        print("Searching for Chrome binary...")
-        try:
-            for path in chrome_paths:
-                if '*' in path:
-                    try:
-                        matches = glob.glob(path)
-                        if matches:
-                            chrome_binary = matches[0]
-                            break
-                    except Exception:
-                        continue
-                else:
-                    if os.path.exists(path):
-                        chrome_binary = path
-                        break
-            if not chrome_binary:
-                import shutil
-                chrome_binary = shutil.which('google-chrome') or shutil.which('google-chrome-stable') or shutil.which('chromium')
-        except Exception as e:
-            print(f"Error during Chrome detection: {e}")
-        
-        browser_args = {
-            'headless': True,
-            'user_data_dir': '/tmp/chrome_profile',
-            'args': ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-        }
-        if chrome_binary:
-            print(f"Using Chrome binary: {chrome_binary}")
-            browser_args['browser_executable_path'] = chrome_binary
-        
-        try:
-            print("Starting browser with nodriver...")
-            self.browser = await uc.start(**browser_args)
-            print("Browser started successfully!")
-            self.page = self.browser.main_tab
-            print("Initial page ready!")
-            await self.page.get('about:blank')
-            print("Browser is fully operational!")
-        except Exception as e:
-            print(f"❌ Failed to start browser: {e}")
-            raise
-
-    async def simple_test(self, url: str = "https://httpbin.org/html"):
-        print(f"🧪 Testing browser with URL: {url}")
-        try:
-            await self.page.get(url)
-            await asyncio.sleep(2)
-            title = await self.page.evaluate('document.title')
-            print(f"✅ Successfully loaded page! Title: {title}")
-            return True
-        except Exception as e:
-            print(f"❌ Test failed: {e}")
-            return False
-
-    async def close(self):
-        # FINAL FIX: Add a try/except block to make cleanup robust
-        try:
-            if self.browser:
-                await self.browser.stop()
-                print("Browser closed successfully!")
-        except Exception as e:
-            print(f"Warning: Error closing browser (might have already crashed): {e}")
+    return "AI scraping script has finished its run. Check the logs for output."
+# -------------------------------------------------
 
 class GeminiEnhancedScraper:
     def __init__(self, gemini_api_key: str):
+        """Initialize the scraper with Gemini AI integration"""
         self.gemini_api_key = gemini_api_key
         genai.configure(api_key=gemini_api_key)
         self.model = genai.GenerativeModel('gemini-pro')
@@ -109,97 +27,156 @@ class GeminiEnhancedScraper:
         self.page = None
 
     async def start_browser(self):
-        # This function is complex, so we'll keep it as is from user's full version
+        """Starts the browser with robust settings for a container environment."""
         print("Starting undetected browser...")
-        chrome_paths = [
-            '/nix/store/bvqn8vwhfxary4j5ydb9l757jacbql96-google-chrome-138.0.7204.92/bin/google-chrome-stable',
-            '/nix/store/*/bin/google-chrome-stable',
-            '/nix/store/*/bin/google-chrome',
-            '/usr/bin/google-chrome',
-            '/usr/bin/google-chrome-stable',
-            '/usr/bin/chromium',
-            '/usr/bin/chromium-browser'
-        ]
-        chrome_binary = None
-        print("Searching for Chrome binary...")
-        try:
-            for path in chrome_paths:
-                if '*' in path:
-                    try:
-                        matches = glob.glob(path)
-                        if matches:
-                            chrome_binary = matches[0]
-                            break
-                    except Exception:
-                        continue
-                else:
-                    if os.path.exists(path):
-                        chrome_binary = path
-                        break
-            if not chrome_binary:
-                import shutil
-                chrome_binary = shutil.which('google-chrome') or shutil.which('google-chrome-stable') or shutil.which('chromium')
-        except Exception as e:
-            print(f"Error during Chrome detection: {e}")
-        
         browser_args = {
             'headless': True,
             'user_data_dir': None,
             'args': [
-                '--no-sandbox', '--disable-setuid-sandbox', '--disable-seccomp-filter-sandbox',
-                '--disable-namespace-sandbox', '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas',
-                '--no-first-run', '--no-zygote', '--single-process', '--disable-gpu'
+                '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+                '--disable-gpu', '--single-process', '--no-zygote'
             ]
         }
-        if chrome_binary:
-            print(f"Using Chrome binary: {chrome_binary}")
-            browser_args['browser_executable_path'] = chrome_binary
-        
+        try:
+            # Check for system-installed Chrome first
+            import shutil
+            chrome_path = shutil.which('google-chrome') or shutil.which('chromium')
+            if chrome_path:
+                print(f"Using system Chrome found at: {chrome_path}")
+                browser_args['browser_executable_path'] = chrome_path
+        except Exception:
+            print("Could not find system Chrome, letting nodriver handle it.")
+
         try:
             self.browser = await uc.start(**browser_args)
-            print("Browser started successfully!")
             self.page = self.browser.main_tab
             await self.page.get('about:blank')
-            print("Browser is fully operational!")
+            print("✅ Browser is fully operational!")
         except Exception as e:
             print(f"❌ Failed to start browser: {e}")
             raise
 
-    async def navigate_with_retry(self, url: str, max_retries: int = 3) -> bool:
-        for attempt in range(max_retries):
-            try:
-                print(f"Navigating to {url} (attempt {attempt + 1})")
-                await self.page.get(url)
-                await asyncio.sleep(3)
-                print(f"✅ Successfully navigated to: {url}")
-                return True
-            except Exception as e:
-                print(f"❌ Navigation attempt {attempt + 1} failed: {e}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(5)
-                else:
-                    return False
-        return False
-    
-    async def auto_navigate_traffic(self, url: str) -> Dict[str, Any]:
-        print(f"Starting auto-navigation for {url}")
-        if not await self.navigate_with_retry(url):
-            return {'error': 'Failed initial navigation'}
-        
-        print("Extracting dynamic content...")
-        title = await self.page.evaluate('document.title')
-        content = await self.page.get_content()
-        
-        final_data = {"title": title, "content_length": len(content)}
-        
+    async def get_ai_scraping_plan(self, query: str) -> Optional[Dict[str, Any]]:
+        """
+        AI Planner: Takes a user query and generates a URL and data extraction plan.
+        """
+        print(f"🧠 Step 1: Creating AI scraping plan for query: '{query}'")
+        prompt = f"""
+        You are an AI assistant that generates a web scraping plan from a natural language query.
+        Based on the user's query, determine the target website and the search term.
+        Construct a valid search URL.
+        Also, identify the key pieces of information the user likely wants.
+
+        User Query: "{query}"
+
+        Respond ONLY with a JSON object in the following format:
+        {{
+          "search_url": "The full, direct URL to visit for the search results.",
+          "data_to_extract": ["product_name", "price", "rating", "reviews_count", "product_url"]
+        }}
+        """
+        try:
+            response = self.model.generate_content(prompt)
+            plan = json.loads(response.text)
+            print(f"✅ AI Plan Generated:\n{json.dumps(plan, indent=2)}")
+            return plan
+        except (json.JSONDecodeError, KeyError, Exception) as e:
+            print(f"❌ Error generating or parsing AI plan: {e}")
+            print(f"Raw AI response was: {response.text}")
+            return None
+
+    async def extract_data_with_ai(self, html_content: str, fields: List[str]) -> Optional[List[Dict[str, Any]]]:
+        """
+        AI Extractor: Takes HTML and a list of fields, then extracts the data.
+        """
+        print(f"🧠 Step 3: Extracting data from HTML using AI...")
+        # Reduce HTML size to avoid exceeding token limits
+        simplified_html = re.sub(r'\s{2,}', ' ', html_content)[:20000]
+
+        prompt = f"""
+        You are an expert data extraction AI. From the provided HTML content, extract the information for each item you can find.
+        The data points to extract are: {', '.join(fields)}.
+
+        HTML Content:
+        "{simplified_html}"
+
+        Respond ONLY with a JSON list of objects. Each object represents one item.
+        The keys in each object should be the requested fields.
+        If a value is not found for a specific field, use `null`.
+        Example format:
+        [
+          {{
+            "product_name": "Example Product 1",
+            "price": "$19.99",
+            "rating": "4.5 out of 5 stars",
+            "reviews_count": "150",
+            "product_url": "https://example.com/product1"
+          }}
+        ]
+        """
+        try:
+            response = self.model.generate_content(prompt)
+            # Use regex to find the JSON block, as AI can sometimes add extra text
+            json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
+            if json_match:
+                extracted_data = json.loads(json_match.group())
+                print(f"✅ AI successfully extracted {len(extracted_data)} items.")
+                return extracted_data
+            else:
+                print("❌ AI did not return a valid JSON list.")
+                print(f"Raw AI response was: {response.text}")
+                return None
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"❌ Error parsing AI extraction response: {e}")
+            return None
+            
+    async def intelligent_scroll(self):
+        """Scrolls the page to trigger lazy-loading content."""
+        print("📜 Scrolling page to load dynamic content...")
+        try:
+            last_height = await self.page.evaluate('document.body.scrollHeight')
+            for _ in range(3): # Scroll 3 times
+                await self.page.evaluate('window.scrollTo(0, document.body.scrollHeight);')
+                await asyncio.sleep(2) # Wait for content to load
+                new_height = await self.page.evaluate('document.body.scrollHeight')
+                if new_height == last_height:
+                    break
+                last_height = new_height
+        except Exception as e:
+            print(f"Could not scroll page: {e}")
+
+
+    async def intelligent_scrape(self, query: str):
+        """Orchestrates the entire AI-driven scraping process."""
+        # Step 1: Get the plan from the AI
+        plan = await self.get_ai_scraping_plan(query)
+        if not plan or 'search_url' not in plan:
+            return {"error": "Could not create a valid scraping plan."}
+
+        # Step 2: Navigate to the planned URL
+        print(f"🧭 Step 2: Navigating to {plan['search_url']}...")
+        try:
+            await self.page.get(plan['search_url'])
+            await asyncio.sleep(3) # Wait for initial page load
+            print("✅ Navigation successful.")
+        except Exception as e:
+            return {"error": f"Failed to navigate to URL: {e}"}
+            
+        # Scroll to load more data
+        await self.intelligent_scroll()
+
+        # Step 3: Get HTML and pass to AI Extractor
+        html = await self.page.get_content()
+        extracted_data = await self.extract_data_with_ai(html, plan['data_to_extract'])
+
         return {
-            'navigation_log': [{'step': 1, 'url': url, 'ai_decision': 'mock decision'}],
-            'final_url': await self.page.evaluate('window.location.href'),
-            'final_data': final_data
+            "query": query,
+            "planned_url": plan['search_url'],
+            "scraped_data": extracted_data
         }
 
     async def close(self):
-        # FINAL FIX: Add a try/except block to make cleanup robust
+        """Robustly closes the browser."""
         try:
             if self.browser:
                 await self.browser.stop()
@@ -207,44 +184,47 @@ class GeminiEnhancedScraper:
         except Exception as e:
             print(f"Warning: Error closing browser (might have already crashed): {e}")
 
-async def main():
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+async def run_scraper():
+    """The main async function that runs the scraper."""
     scraper = None
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
     if not GEMINI_API_KEY:
-        print("\n🧪 Running in TEST MODE (browser only, no AI analysis)...")
-        scraper = TestScraper()
-    else:
-        scraper = GeminiEnhancedScraper(GEMINI_API_KEY)
+        print("❌ GEMINI_API_KEY environment variable not set! Cannot run.")
+        return
 
     try:
+        scraper = GeminiEnhancedScraper(GEMINI_API_KEY)
         await scraper.start_browser()
-        if isinstance(scraper, TestScraper):
-            success = await scraper.simple_test()
-            if success:
-                print("\n✅ Browser test completed successfully!")
-        else:
-            url = "https://example.com"
-            print(f"🤖 Starting AI-powered navigation for: {url}")
-            result = await scraper.auto_navigate_traffic(url)
-            print("\n" + "="*50)
-            print("SCRAPING RESULTS")
-            print("="*50)
-            print(json.dumps(result, indent=2))
-            with open('scraping_results.json', 'w', encoding='utf-8') as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
-            print("\nResults saved to scraping_results.json")
+
+        # <<< --- CHANGE YOUR QUERY HERE --- >>>
+        user_query = "Rolex watch on Amazon.com"
+        
+        result = await scraper.intelligent_scrape(user_query)
+
+        print("\n" + "="*50)
+        print("      FINAL SCRAPING RESULTS")
+        print("="*50)
+        print(json.dumps(result, indent=2))
+
+        # Save results to file
+        with open('scraping_results.json', 'w', encoding='utf-8') as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+        print("\n✅ Results saved to scraping_results.json")
+
     except Exception as e:
-        print(f"An error occurred during the main scraping process: {e}")
+        print(f"A critical error occurred: {e}")
     finally:
         if scraper:
             await scraper.close()
 
 if __name__ == "__main__":
-    print("Gemini AI Enhanced Web Scraper")
+    print("🚀 Gemini AI Enhanced Web Scraper 🚀")
     print("=" * 40)
     
-    asyncio.run(main())
+    # Run the main scraping logic first
+    asyncio.run(run_scraper())
     
-    print("Scraping finished. Starting web server to keep service alive.")
+    # After scraping is done, start the web server to keep the Render service alive
+    print("\n✅ Scraping finished. Starting web server to keep the service running.")
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
