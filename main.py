@@ -423,163 +423,201 @@ class GeminiEnhancedScraper:
 
         return False
 
-    async def auto_navigate_traffic(self, url: str) -> Dict[str, Any]:
-        """Automatically navigate through complex website traffic using Gemini AI"""
-        print(f"Starting intelligent navigation for {url}")
-
-        if not await self.navigate_with_retry(url):
-            return {'error': 'Failed initial navigation'}
-
-        navigation_log = []
-        current_url = url
-
-        for step in range(5):  # Max 5 navigation steps
+    async def smart_wait_for_element(self, selector: str, timeout: int = 30) -> bool:
+        """Smart element waiting with multiple strategies"""
+        strategies = [
+            f"document.querySelector('{selector}')",
+            f"document.querySelectorAll('{selector}').length > 0",
+            f"!!document.querySelector('{selector}')"
+        ]
+        
+        for strategy in strategies:
             try:
-                # Take screenshot and analyze page
-                await asyncio.sleep(2)
-                page_content = await self.page.get_content()
-                current_url = await self.page.evaluate('window.location.href')
+                await self.page.wait_for(expression=strategy, timeout=timeout * 1000)
+                return True
+            except:
+                continue
+        return False
 
-                # Get page analysis from Gemini
-                analysis_prompt = f"""
-                Analyze this webpage content and determine next navigation steps:
+    async def handle_common_overlays(self) -> bool:
+        """Handle common overlay elements like cookie banners, popups, etc."""
+        overlay_selectors = [
+            # Cookie banners
+            '[id*="cookie"] button[id*="accept"]',
+            '[class*="cookie"] button[class*="accept"]',
+            '[id*="cookie"] button[id*="allow"]',
+            'button[data-testid*="cookie-accept"]',
+            
+            # Age verification
+            '[class*="age-verify"] button',
+            '[id*="age-confirm"] button',
+            'button[class*="confirm-age"]',
+            
+            # General popup close buttons
+            '[class*="modal"] [class*="close"]',
+            '[class*="popup"] [class*="close"]',
+            '[class*="overlay"] [class*="close"]',
+            'button[aria-label*="close"]',
+            '[data-dismiss="modal"]',
+            
+            # Newsletter signups
+            '[class*="newsletter"] [class*="close"]',
+            '[class*="signup"] [class*="close"]',
+            '[id*="newsletter"] [class*="close"]'
+        ]
+        
+        handled = False
+        for selector in overlay_selectors:
+            try:
+                elements = await self.page.select_all(selector)
+                if elements:
+                    await elements[0].click()
+                    await asyncio.sleep(1)
+                    print(f"Handled overlay: {selector}")
+                    handled = True
+                    break
+            except:
+                continue
+        
+        return handled
 
-                Current URL: {current_url}
-                Step: {step + 1}/5
-
-                Webpage HTML (first 3000 chars):
-                {page_content[:3000]}
-
-                Instructions:
-                1. Identify if this is a blocking page (CAPTCHA, age verification, cookie consent, etc.)
-                2. Look for navigation elements (buttons, links, forms)
-                3. Suggest the best action to take:
-                   - Click a specific element (provide selector)
-                   - Fill a form (provide selectors and values)
-                   - Wait for something to load
-                   - Navigate to a different URL
-                   - Stop here (if we've reached target content)
-
-                Respond with JSON format:
-                {{
-                    "action": "click|fill|wait|navigate|stop",
-                    "selector": "CSS selector if needed",
-                    "value": "text to fill if needed",
-                    "url": "URL to navigate to if needed",
-                    "reasoning": "why this action"
-                }}
-                """
-
-                ai_decision = self.analyze_with_gemini({'content': page_content[:2000]}, analysis_prompt)
-                navigation_log.append({
-                    'step': step + 1,
-                    'url': current_url,
-                    'ai_decision': ai_decision
-                })
-
-                print(f"Step {step + 1}: AI Decision - {ai_decision[:200]}...")
-
-                # Try to parse AI decision as JSON and execute
+    async def intelligent_scroll(self, strategy: str = "progressive") -> None:
+        """Intelligent scrolling strategies to trigger dynamic content"""
+        if strategy == "progressive":
+            # Progressive scrolling to load lazy content
+            viewport_height = await self.page.evaluate('window.innerHeight')
+            page_height = await self.page.evaluate('document.body.scrollHeight')
+            
+            current_position = 0
+            scroll_step = viewport_height // 2
+            
+            while current_position < page_height:
+                await self.page.evaluate(f'window.scrollTo(0, {current_position})')
+                await asyncio.sleep(0.5)
+                current_position += scroll_step
+                
+                # Check if new content loaded
+                new_height = await self.page.evaluate('document.body.scrollHeight')
+                if new_height > page_height:
+                    page_height = new_height
+                    
+        elif strategy == "bottom_trigger":
+            # Scroll to bottom to trigger infinite scroll
+            await self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            await asyncio.sleep(2)
+            
+        elif strategy == "hover_trigger":
+            # Hover over elements to trigger dynamic content
+            interactive_elements = await self.page.select_all('a, button, [data-*], [class*="hover"]')
+            for elem in interactive_elements[:5]:
                 try:
-                    import json
-                    import re
+                    await elem.mouse_move()
+                    await asyncio.sleep(0.3)
+                except:
+                    continue
 
-                    # Extract JSON from AI response
-                    json_match = re.search(r'\{.*\}', ai_decision, re.DOTALL)
-                    if json_match:
-                        decision = json.loads(json_match.group())
-
-                        if decision.get('action') == 'stop':
-                            print("AI decided to stop navigation - target reached")
-                            break
-                        elif decision.get('action') == 'click':
-                            selector = decision.get('selector')
-                            if selector:
-                                elements = await self.page.select_all(selector)
-                                if elements:
-                                    await elements[0].click()
-                                    await asyncio.sleep(3)
-                                    print(f"Clicked element: {selector}")
-                        elif decision.get('action') == 'fill':
-                            selector = decision.get('selector')
-                            value = decision.get('value')
-                            if selector and value:
-                                elements = await self.page.select_all(selector)
-                                if elements:
-                                    await elements[0].send_keys(value)
-                                    await asyncio.sleep(2)
-                                    print(f"Filled {selector} with {value}")
-                        elif decision.get('action') == 'navigate':
-                            new_url = decision.get('url')
-                            if new_url:
-                                await self.page.get(new_url)
-                                await asyncio.sleep(3)
-                                print(f"Navigated to: {new_url}")
-                        elif decision.get('action') == 'wait':
-                            print("AI decided to wait...")
-                            await asyncio.sleep(5)
-
-                except (json.JSONDecodeError, KeyError) as e:
-                    print(f"Could not parse AI decision: {e}")
-                    # Fallback: just wait and continue
-                    await asyncio.sleep(3)
-
-            except Exception as e:
-                print(f"Error in navigation step {step + 1}: {e}")
-                break
-
-        # Final data extraction
-        final_data = await self.extract_data()
-
-        return {
-            'navigation_log': navigation_log,
-            'final_url': current_url,
-            'final_data': final_data,
-            'steps_completed': len(navigation_log)
-        }
-
-    async def extract_data(self, selectors: Dict[str, str] = None) -> Dict[str, Any]:
-        """Extract data from the current page"""
+    async def extract_dynamic_content(self, selectors: Dict[str, str] = None) -> Dict[str, Any]:
+        """Enhanced data extraction with dynamic content handling"""
+        # Handle overlays first
+        await self.handle_common_overlays()
+        
+        # Progressive scroll to load content
+        await self.intelligent_scroll("progressive")
+        
+        # Wait for potential dynamic content
+        await asyncio.sleep(2)
+        
+        # Extract data with enhanced selectors
         if not selectors:
-            # Default selectors for common elements
             selectors = {
-                'title': 'title',
-                'headings': 'h1, h2, h3',
-                'paragraphs': 'p',
-                'links': 'a',
-                'images': 'img'
+                'title': 'title, h1, [class*="title"], [id*="title"]',
+                'headings': 'h1, h2, h3, h4, h5, h6',
+                'content': 'main, article, [class*="content"], [class*="article"], [role="main"]',
+                'navigation': 'nav a, [class*="nav"] a, [role="navigation"] a',
+                'products': '[class*="product"], [data-product], [itemtype*="Product"]',
+                'prices': '[class*="price"], [data-price], .currency, [class*="cost"]',
+                'images': 'img[src], [style*="background-image"]',
+                'forms': 'form, [class*="form"], input[type="email"], input[type="search"]',
+                'social': '[class*="social"] a, [href*="facebook"], [href*="twitter"], [href*="instagram"]'
             }
-
+        
         extracted_data = {}
-
+        
         for key, selector in selectors.items():
             try:
                 elements = await self.page.select_all(selector)
                 if elements:
-                    if key == 'title':
-                        extracted_data[key] = await elements[0].get_attribute('textContent')
-                    elif key == 'links':
-                        links = []
-                        for elem in elements[:10]:  # Limit to first 10 links
-                            text = await elem.get_attribute('textContent')
-                            href = await elem.get_attribute('href')
-                            if text and href:
-                                links.append({'text': text.strip(), 'href': href})
-                        extracted_data[key] = links
-                    elif key == 'images':
+                    if key == 'images':
                         images = []
-                        for elem in elements[:5]:  # Limit to first 5 images
+                        for elem in elements[:10]:
                             src = await elem.get_attribute('src')
                             alt = await elem.get_attribute('alt')
+                            # Handle background images
+                            if not src:
+                                style = await elem.get_attribute('style')
+                                if style and 'background-image' in style:
+                                    import re
+                                    match = re.search(r'url\(["\']?([^"\']+)["\']?\)', style)
+                                    if match:
+                                        src = match.group(1)
+                            
                             if src:
-                                images.append({'src': src, 'alt': alt or ''})
+                                images.append({
+                                    'src': src,
+                                    'alt': alt or '',
+                                    'width': await elem.get_attribute('width') or '',
+                                    'height': await elem.get_attribute('height') or ''
+                                })
                         extracted_data[key] = images
+                        
+                    elif key == 'forms':
+                        forms = []
+                        for elem in elements[:5]:
+                            action = await elem.get_attribute('action')
+                            method = await elem.get_attribute('method')
+                            form_inputs = await elem.select_all('input, select, textarea')
+                            
+                            input_data = []
+                            for inp in form_inputs:
+                                input_type = await inp.get_attribute('type')
+                                name = await inp.get_attribute('name')
+                                placeholder = await inp.get_attribute('placeholder')
+                                if name:
+                                    input_data.append({
+                                        'type': input_type or 'text',
+                                        'name': name,
+                                        'placeholder': placeholder or ''
+                                    })
+                            
+                            forms.append({
+                                'action': action or '',
+                                'method': method or 'GET',
+                                'inputs': input_data
+                            })
+                        extracted_data[key] = forms
+                        
+                    elif key == 'products':
+                        products = []
+                        for elem in elements[:10]:
+                            # Try to extract product information
+                            name_elem = await elem.select('h1, h2, h3, [class*="name"], [class*="title"]')
+                            price_elem = await elem.select('[class*="price"], .currency, [data-price]')
+                            
+                            product_data = {
+                                'name': await name_elem[0].get_attribute('textContent') if name_elem else '',
+                                'price': await price_elem[0].get_attribute('textContent') if price_elem else '',
+                                'html': await elem.get_attribute('outerHTML')
+                            }
+                            products.append(product_data)
+                        extracted_data[key] = products
+                        
                     else:
+                        # Standard text extraction
                         texts = []
-                        for elem in elements[:10]:  # Limit to first 10 elements
+                        for elem in elements[:15]:
                             text = await elem.get_attribute('textContent')
-                            if text and text.strip():
-                                texts.append(text.strip())
+                            if text and text.strip() and len(text.strip()) > 3:
+                                texts.append(text.strip()[:500])  # Limit text length
                         extracted_data[key] = texts
 
             except Exception as e:
@@ -587,6 +625,197 @@ class GeminiEnhancedScraper:
                 extracted_data[key] = []
 
         return extracted_data
+
+    async def auto_navigate_traffic(self, url: str) -> Dict[str, Any]:
+        """Enhanced intelligent navigation with advanced automation features"""
+        print(f"Starting intelligent navigation for {url}")
+
+        if not await self.navigate_with_retry(url):
+            return {'error': 'Failed initial navigation'}
+
+        navigation_log = []
+        current_url = url
+        screenshots = []
+
+        for step in range(7):  # Increased max steps
+            try:
+                # Handle common overlays first
+                overlay_handled = await self.handle_common_overlays()
+                if overlay_handled:
+                    await asyncio.sleep(1)
+
+                # Progressive content loading
+                await self.intelligent_scroll("progressive")
+                await asyncio.sleep(2)
+
+                page_content = await self.page.get_content()
+                current_url = await self.page.evaluate('window.location.href')
+
+                # Enhanced page analysis
+                analysis_prompt = f"""
+                Analyze this webpage and determine the next automation action:
+
+                Current URL: {current_url}
+                Step: {step + 1}/7
+                Overlay handled: {overlay_handled}
+
+                Page info:
+                - Title: {await self.page.evaluate('document.title')}
+                - Page height: {await self.page.evaluate('document.body.scrollHeight')}
+                - Forms count: {len(await self.page.select_all('form'))}
+                - Buttons count: {len(await self.page.select_all('button'))}
+                - Links count: {len(await self.page.select_all('a'))}
+
+                HTML content (first 4000 chars):
+                {page_content[:4000]}
+
+                Available actions:
+                1. "click" - Click specific element (provide CSS selector)
+                2. "fill_form" - Fill form fields (provide form selector and field data)
+                3. "scroll_load" - Scroll to load more content
+                4. "navigate" - Go to specific URL
+                5. "extract" - Extract data from current page
+                6. "wait_for" - Wait for specific element to appear
+                7. "stop" - Stop navigation (target reached)
+
+                Focus on:
+                - Bypassing verification pages, age gates, cookie banners
+                - Finding "load more", "next page", or pagination
+                - Locating main content areas
+                - Identifying data-rich sections
+
+                Respond in JSON:
+                {{
+                    "action": "click|fill_form|scroll_load|navigate|extract|wait_for|stop",
+                    "selector": "CSS selector if needed",
+                    "form_data": {{"field_name": "value"}} if filling form,
+                    "url": "URL if navigating",
+                    "wait_element": "selector to wait for",
+                    "reasoning": "detailed explanation",
+                    "confidence": "high|medium|low"
+                }}
+                """
+
+                ai_decision = self.analyze_with_gemini({'content': page_content[:3000]}, analysis_prompt)
+                navigation_log.append({
+                    'step': step + 1,
+                    'url': current_url,
+                    'ai_decision': ai_decision,
+                    'overlay_handled': overlay_handled
+                })
+
+                print(f"Step {step + 1}: {ai_decision[:150]}...")
+
+                # Enhanced action execution
+                try:
+                    import json
+                    import re
+
+                    json_match = re.search(r'\{.*\}', ai_decision, re.DOTALL)
+                    if json_match:
+                        decision = json.loads(json_match.group())
+                        action = decision.get('action', '').lower()
+
+                        if action == 'stop':
+                            print("AI decided to stop - target content reached")
+                            break
+                            
+                        elif action == 'click':
+                            selector = decision.get('selector')
+                            if selector:
+                                if await self.smart_wait_for_element(selector, 10):
+                                    elements = await self.page.select_all(selector)
+                                    if elements:
+                                        # Try to scroll element into view first
+                                        await elements[0].scroll_into_view()
+                                        await asyncio.sleep(1)
+                                        await elements[0].click()
+                                        await asyncio.sleep(3)
+                                        print(f"✅ Clicked: {selector}")
+                                    else:
+                                        print(f"❌ Element not found: {selector}")
+                                else:
+                                    print(f"⏳ Timeout waiting for: {selector}")
+                                    
+                        elif action == 'fill_form':
+                            form_selector = decision.get('selector', 'form')
+                            form_data = decision.get('form_data', {})
+                            
+                            forms = await self.page.select_all(form_selector)
+                            if forms and form_data:
+                                form = forms[0]
+                                for field_name, value in form_data.items():
+                                    try:
+                                        field_selectors = [
+                                            f'input[name="{field_name}"]',
+                                            f'select[name="{field_name}"]',
+                                            f'textarea[name="{field_name}"]',
+                                            f'#{field_name}',
+                                            f'.{field_name}'
+                                        ]
+                                        
+                                        for field_selector in field_selectors:
+                                            fields = await form.select_all(field_selector)
+                                            if fields:
+                                                await fields[0].send_keys(str(value))
+                                                print(f"✅ Filled {field_name}: {value}")
+                                                break
+                                    except Exception as e:
+                                        print(f"❌ Error filling {field_name}: {e}")
+                                
+                                # Try to submit form
+                                submit_buttons = await form.select_all('input[type="submit"], button[type="submit"], button:not([type])')
+                                if submit_buttons:
+                                    await submit_buttons[0].click()
+                                    await asyncio.sleep(3)
+                                    print("✅ Form submitted")
+                                    
+                        elif action == 'scroll_load':
+                            await self.intelligent_scroll("bottom_trigger")
+                            await asyncio.sleep(3)
+                            print("✅ Scrolled to load more content")
+                            
+                        elif action == 'navigate':
+                            new_url = decision.get('url')
+                            if new_url:
+                                await self.page.get(new_url)
+                                await asyncio.sleep(3)
+                                print(f"✅ Navigated to: {new_url}")
+                                
+                        elif action == 'wait_for':
+                            wait_selector = decision.get('wait_element')
+                            if wait_selector:
+                                if await self.smart_wait_for_element(wait_selector, 15):
+                                    print(f"✅ Element appeared: {wait_selector}")
+                                else:
+                                    print(f"⏳ Timeout waiting for: {wait_selector}")
+                                    
+                        elif action == 'extract':
+                            print("✅ AI triggered data extraction")
+                            # Continue to extract at the end
+
+                except (json.JSONDecodeError, KeyError) as e:
+                    print(f"❌ Could not parse AI decision: {e}")
+                    await asyncio.sleep(3)
+
+            except Exception as e:
+                print(f"❌ Error in step {step + 1}: {e}")
+                break
+
+        # Enhanced final data extraction
+        final_data = await self.extract_dynamic_content()
+
+        return {
+            'navigation_log': navigation_log,
+            'final_url': current_url,
+            'final_data': final_data,
+            'steps_completed': len(navigation_log),
+            'total_elements_found': sum(len(v) if isinstance(v, list) else 1 for v in final_data.values())
+        }
+
+    async def extract_data(self, selectors: Dict[str, str] = None) -> Dict[str, Any]:
+        """Extract data from the current page - delegates to enhanced extraction"""
+        return await self.extract_dynamic_content(selectors)
 
     def analyze_with_gemini(self, data: Dict[str, Any], analysis_prompt: str = None) -> str:
         """Analyze extracted data using Gemini AI"""
