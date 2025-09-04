@@ -75,10 +75,11 @@ class TestScraper:
         browser_args = {
             'headless': True,
             'user_data_dir': None,
-            'no_sandbox': True,  # Required for running as root in Replit
             'args': [
-                '--no-sandbox',
+                '--no-sandbox',  # Move this to args list for proper handling
                 '--disable-setuid-sandbox',
+                '--disable-seccomp-filter-sandbox',
+                '--disable-namespace-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
@@ -225,10 +226,11 @@ class GeminiEnhancedScraper:
         browser_args = {
             'headless': True,  # Use headless for Replit
             'user_data_dir': None,  # Use temporary profile
-            'no_sandbox': True,
             'args': [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
+                '--disable-seccomp-filter-sandbox',
+                '--disable-namespace-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
@@ -364,22 +366,22 @@ class GeminiEnhancedScraper:
                     'cf-challenge-running', 'ray id:', 'please wait',
                     'security check', 'browser verification'
                 ]
-                
+
                 if any(indicator in page_content.lower() for indicator in cf_indicators):
                     print("🛡️ Cloudflare protection detected, attempting bypass...")
-                    
+
                     # Wait for challenge resolution
                     for wait_time in [5, 10, 15]:
                         await asyncio.sleep(wait_time)
                         current_content = await self.page.get_content()
-                        
+
                         # Check if we're still on a challenge page
                         if not any(indicator in current_content.lower() for indicator in cf_indicators):
                             print("✅ Cloudflare challenge bypassed!")
                             break
                         else:
                             print(f"⏳ Still waiting for challenge resolution... ({wait_time}s)")
-                    
+
                     # Try clicking the verification button if it exists
                     try:
                         verify_selectors = [
@@ -388,7 +390,7 @@ class GeminiEnhancedScraper:
                             '.cf-button',
                             '#challenge-form input[type="submit"]'
                         ]
-                        
+
                         for selector in verify_selectors:
                             elements = await self.page.select_all(selector)
                             if elements:
@@ -422,30 +424,30 @@ class GeminiEnhancedScraper:
     async def auto_navigate_traffic(self, url: str) -> Dict[str, Any]:
         """Automatically navigate through complex website traffic using Gemini AI"""
         print(f"Starting intelligent navigation for {url}")
-        
+
         if not await self.navigate_with_retry(url):
             return {'error': 'Failed initial navigation'}
 
         navigation_log = []
         current_url = url
-        
+
         for step in range(5):  # Max 5 navigation steps
             try:
                 # Take screenshot and analyze page
                 await asyncio.sleep(2)
                 page_content = await self.page.get_content()
                 current_url = await self.page.evaluate('window.location.href')
-                
+
                 # Get page analysis from Gemini
                 analysis_prompt = f"""
                 Analyze this webpage content and determine next navigation steps:
-                
+
                 Current URL: {current_url}
                 Step: {step + 1}/5
-                
+
                 Webpage HTML (first 3000 chars):
                 {page_content[:3000]}
-                
+
                 Instructions:
                 1. Identify if this is a blocking page (CAPTCHA, age verification, cookie consent, etc.)
                 2. Look for navigation elements (buttons, links, forms)
@@ -455,7 +457,7 @@ class GeminiEnhancedScraper:
                    - Wait for something to load
                    - Navigate to a different URL
                    - Stop here (if we've reached target content)
-                
+
                 Respond with JSON format:
                 {{
                     "action": "click|fill|wait|navigate|stop",
@@ -465,26 +467,26 @@ class GeminiEnhancedScraper:
                     "reasoning": "why this action"
                 }}
                 """
-                
+
                 ai_decision = self.analyze_with_gemini({'content': page_content[:2000]}, analysis_prompt)
                 navigation_log.append({
                     'step': step + 1,
                     'url': current_url,
                     'ai_decision': ai_decision
                 })
-                
+
                 print(f"Step {step + 1}: AI Decision - {ai_decision[:200]}...")
-                
+
                 # Try to parse AI decision as JSON and execute
                 try:
                     import json
                     import re
-                    
+
                     # Extract JSON from AI response
                     json_match = re.search(r'\{.*\}', ai_decision, re.DOTALL)
                     if json_match:
                         decision = json.loads(json_match.group())
-                        
+
                         if decision.get('action') == 'stop':
                             print("AI decided to stop navigation - target reached")
                             break
@@ -514,19 +516,19 @@ class GeminiEnhancedScraper:
                         elif decision.get('action') == 'wait':
                             print("AI decided to wait...")
                             await asyncio.sleep(5)
-                            
+
                 except (json.JSONDecodeError, KeyError) as e:
                     print(f"Could not parse AI decision: {e}")
                     # Fallback: just wait and continue
                     await asyncio.sleep(3)
-                    
+
             except Exception as e:
                 print(f"Error in navigation step {step + 1}: {e}")
                 break
-        
+
         # Final data extraction
         final_data = await self.extract_data()
-        
+
         return {
             'navigation_log': navigation_log,
             'final_url': current_url,
@@ -674,10 +676,10 @@ async def main():
             print("\n🚀 Choose navigation mode:")
             print("1. Simple scrape (direct URL)")
             print("2. Auto-navigate through traffic (AI-powered)")
-            
+
             # For demo, let's use auto-navigation
             mode = 2  # You can change this or make it user input
-            
+
             if mode == 1:
                 # Simple scraping
                 url = "https://httpbin.org/html"
@@ -705,19 +707,19 @@ async def main():
             print("\n" + "="*50)
             print("SCRAPING RESULTS")
             print("="*50)
-            
+
             if 'navigation_log' in result:
                 # Auto-navigation results
                 print(f"Final URL: {result.get('final_url', 'N/A')}")
                 print(f"Steps completed: {result.get('steps_completed', 0)}")
-                
+
                 print("\nNAVIGATION LOG:")
                 print("-" * 30)
                 for log_entry in result.get('navigation_log', []):
                     print(f"Step {log_entry['step']}: {log_entry['url']}")
                     print(f"  AI Decision: {log_entry['ai_decision'][:100]}...")
                     print()
-                
+
                 print("\nFINAL EXTRACTED DATA:")
                 print("-" * 30)
                 for key, value in result.get('final_data', {}).items():
