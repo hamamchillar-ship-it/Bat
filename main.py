@@ -1,4 +1,3 @@
-
 import asyncio
 import nodriver as uc
 import google.generativeai as genai
@@ -114,7 +113,8 @@ class TestScraper:
         """Simple test without AI analysis"""
         print(f"🧪 Testing browser with URL: {url}")
         try:
-            await self.page.get(url, timeout=15000)
+            # FIX: Removed unsupported 'timeout' argument
+            await self.page.get(url)
             await asyncio.sleep(2)
             title = await self.page.evaluate('document.title')
             print(f"✅ Successfully loaded page! Title: {title}")
@@ -328,7 +328,8 @@ class GeminiEnhancedScraper:
         for attempt in range(max_retries):
             try:
                 print(f"Navigating to {url} (attempt {attempt + 1})")
-                await self.page.get(url, timeout=30000)
+                # FIX: Removed unsupported 'timeout' argument
+                await self.page.get(url)
 
                 # Wait for initial page load
                 await asyncio.sleep(3)
