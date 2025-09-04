@@ -22,7 +22,8 @@ class GeminiEnhancedScraper:
         """Initialize the scraper with Gemini AI integration"""
         self.gemini_api_key = gemini_api_key
         genai.configure(api_key=gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+        # <<< --- AI MODEL UPDATED HERE --- >>>
+        self.model = genai.GenerativeModel('gemini-1.5-flash-latest')
         self.browser = None
         self.page = None
 
@@ -75,6 +76,7 @@ class GeminiEnhancedScraper:
           "data_to_extract": ["product_name", "price", "rating", "reviews_count", "product_url"]
         }}
         """
+        response = None # Define response here to access it in except block
         try:
             response = self.model.generate_content(prompt)
             plan = json.loads(response.text)
@@ -82,7 +84,8 @@ class GeminiEnhancedScraper:
             return plan
         except (json.JSONDecodeError, KeyError, Exception) as e:
             print(f"❌ Error generating or parsing AI plan: {e}")
-            print(f"Raw AI response was: {response.text}")
+            if response:
+                print(f"Raw AI response was: {response.text}")
             return None
 
     async def extract_data_with_ai(self, html_content: str, fields: List[str]) -> Optional[List[Dict[str, Any]]]:
@@ -92,7 +95,7 @@ class GeminiEnhancedScraper:
         print(f"🧠 Step 3: Extracting data from HTML using AI...")
         # Reduce HTML size to avoid exceeding token limits
         simplified_html = re.sub(r'\s{2,}', ' ', html_content)[:20000]
-
+        response = None # Define response here
         prompt = f"""
         You are an expert data extraction AI. From the provided HTML content, extract the information for each item you can find.
         The data points to extract are: {', '.join(fields)}.
@@ -128,6 +131,8 @@ class GeminiEnhancedScraper:
                 return None
         except (json.JSONDecodeError, Exception) as e:
             print(f"❌ Error parsing AI extraction response: {e}")
+            if response:
+                print(f"Raw AI response was: {response.text}")
             return None
             
     async def intelligent_scroll(self):
